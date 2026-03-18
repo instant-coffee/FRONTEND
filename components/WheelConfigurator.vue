@@ -1,0 +1,354 @@
+<template>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+    <!-- Left — visual / summary panel -->
+    <div class="space-y-6">
+      <!-- Wheel graphic -->
+      <div class="aspect-square bg-nobl-grey-muted rounded-lg flex flex-col items-center justify-center gap-4">
+        <svg class="w-48 h-48 text-nobl-grey-border" viewBox="0 0 200 200" fill="none">
+          <circle cx="100" cy="100" r="90" stroke="currentColor" stroke-width="8" />
+          <circle cx="100" cy="100" r="60" stroke="currentColor" stroke-width="4" />
+          <circle cx="100" cy="100" r="12" fill="currentColor" opacity="0.3" />
+          <line v-for="n in 12" :key="n"
+            :transform="`rotate(${n * 30} 100 100)`"
+            x1="100" y1="16" x2="100" y2="40"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          />
+          <line v-for="n in 12" :key="`b${n}`"
+            :transform="`rotate(${n * 30 + 15} 100 100)`"
+            x1="100" y1="16" x2="100" y2="40"
+            stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"
+          />
+        </svg>
+        <div class="text-center">
+          <p class="text-xs font-semibold text-nobl-grey-light uppercase tracking-widest">
+            {{ selectedVariant?.rimSize ?? '—' }}
+          </p>
+          <p class="text-xs text-nobl-grey-light mt-0.5">
+            {{ selectedVariant?.position ?? 'Select options' }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Selected configuration summary -->
+      <div v-if="selectedVariant" class="border border-nobl-grey-border rounded-lg p-5 space-y-3">
+        <p class="nobl-label">Selected configuration</p>
+        <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <!-- Variant attributes -->
+          <div v-for="(val, key) in selectedVariant.attributes" :key="String(key)">
+            <span class="text-nobl-grey-light text-xs">{{ key }}</span>
+            <div class="font-medium text-nobl-black mt-0.5">{{ val }}</div>
+          </div>
+          <!-- Chosen no-variant options -->
+          <div v-for="option in visibleOptions" :key="`sel-${option.type}`">
+            <span class="text-nobl-grey-light text-xs">{{ option.label }}</span>
+            <div class="font-medium text-nobl-black mt-0.5">
+              {{ selectedOptionLabels[option.type] || '—' }}
+            </div>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-nobl-grey-border">
+          <span class="text-xs font-mono text-nobl-grey-light">SKU: {{ selectedVariant.sku || '—' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right — controls -->
+    <div class="space-y-8">
+      <!-- Name + description + price -->
+      <div class="border-b border-nobl-grey-border pb-6">
+        <h1 class="text-2xl font-bold text-nobl-black">{{ product.name }}</h1>
+        <p v-if="product.description" class="text-nobl-grey text-sm mt-2 leading-relaxed max-w-prose">
+          {{ stripHtml(product.description) }}
+        </p>
+
+        <div class="mt-5">
+          <div v-if="selectedVariant" class="flex items-baseline gap-2">
+            <span class="nobl-price">{{ selectedVariant.price.formatted }}</span>
+          </div>
+          <div v-else class="nobl-price text-nobl-grey-light">
+            From {{ minPriceFormatted }}
+          </div>
+          <p class="nobl-price-note mt-1">
+            {{ product.currency }} · Retail price
+          </p>
+        </div>
+      </div>
+
+      <!-- ── Rim Size ── -->
+      <div>
+        <label for="rim-size" class="nobl-label">Rim Size</label>
+        <select id="rim-size" v-model="selectedRimSize" class="nobl-select">
+          <option value="" disabled>Select rim size</option>
+          <option v-for="size in availableRimSizes" :key="size" :value="size">{{ size }}</option>
+        </select>
+      </div>
+
+      <!-- ── Wheelset Position ── -->
+      <div>
+        <label class="nobl-label">Wheelset Options</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            v-for="pos in availablePositions"
+            :key="pos"
+            type="button"
+            :disabled="!isPositionAvailable(pos)"
+            :class="[
+              'border rounded px-3 py-3 text-sm font-medium text-center transition-all duration-150',
+              selectedPosition === pos
+                ? 'border-nobl-black bg-nobl-black text-white'
+                : 'border-nobl-grey-border text-nobl-grey hover:border-nobl-black',
+              !isPositionAvailable(pos) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+            ]"
+            @click="selectedPosition = pos"
+          >
+            <div class="text-xs leading-tight whitespace-pre-line">{{ posShortLabel(pos) }}</div>
+            <div v-if="selectedRimSize && isPositionAvailable(pos)" class="text-xs mt-1 opacity-70">
+              {{ priceFormattedForPosition(pos) }}
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── No-variant options (freehub, brake, etc.) ── -->
+      <template v-for="option in visibleOptions" :key="option.type">
+        <div>
+          <label :for="`opt-${option.type}`" class="nobl-label">
+            {{ option.label }}
+            <span v-if="option.required" class="text-red-400 ml-0.5">*</span>
+          </label>
+          <select
+            :id="`opt-${option.type}`"
+            v-model="selectedOptionIds[option.type]"
+            class="nobl-select"
+          >
+            <option :value="undefined" disabled>Select {{ option.label.toLowerCase() }}</option>
+            <option
+              v-for="val in option.values"
+              :key="val.id"
+              :value="val.id"
+            >
+              {{ val.label }}
+            </option>
+          </select>
+          <p v-if="option.visibleFor.length" class="text-xs text-nobl-grey-light mt-1.5">
+            Applies to: {{ option.visibleFor.join(', ') }}
+          </p>
+        </div>
+      </template>
+
+      <!-- ── Add to Cart ── -->
+      <div class="pt-2 space-y-3">
+        <button
+          type="button"
+          class="nobl-btn-primary w-full"
+          :disabled="!canAddToCart"
+          @click="handleAddToCart"
+        >
+          <span v-if="cart.loading.value">Adding…</span>
+          <span v-else-if="!selectedVariant">Select a configuration above</span>
+          <span v-else-if="!allRequiredOptionsSelected">Choose all required options</span>
+          <span v-else>Add to Cart — {{ selectedVariant.price.formatted }}</span>
+        </button>
+
+        <p v-if="cart.error.value" class="text-red-600 text-xs">
+          {{ cart.error.value }}
+        </p>
+
+        <div
+          v-if="cart.lastOrder.value"
+          class="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800"
+        >
+          ✓ Added to order <span class="font-mono">{{ cart.lastOrder.value.orderName }}</span>
+        </div>
+      </div>
+
+      <!-- ── Add-ons ── -->
+      <div v-if="product.addOns?.length" class="pt-4 border-t border-nobl-grey-border">
+        <p class="nobl-label mb-3">Optional Add-ons</p>
+        <div class="space-y-2">
+          <label
+            v-for="addon in product.addOns"
+            :key="addon.id"
+            class="flex items-center justify-between gap-3 p-3 border border-nobl-grey-border rounded cursor-pointer hover:border-nobl-black transition-colors"
+          >
+            <div class="flex items-center gap-3">
+              <input
+                type="checkbox"
+                :value="addon.id"
+                v-model="selectedAddonIds"
+                class="rounded border-nobl-grey-border"
+              />
+              <div>
+                <span class="text-sm font-medium text-nobl-black">{{ addon.name }}</span>
+                <span class="text-xs text-nobl-grey-light ml-2">{{ addon.category }}</span>
+              </div>
+            </div>
+            <span class="text-sm text-nobl-grey whitespace-nowrap">+{{ addon.price.formatted }}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { Product, ProductVariant, WheelOption } from '~/types/api'
+
+const props = defineProps<{ product: Product }>()
+
+const cart = useCart()
+
+// ─── Selection state ──────────────────────────────────────────────────────────
+
+const selectedRimSize  = ref('')
+const selectedPosition = ref('')
+// Keyed by option.type → selected PTAV id (number)
+const selectedOptionIds = reactive<Record<string, number | undefined>>({})
+const selectedAddonIds  = ref<number[]>([])
+
+// ─── Derived — available rim sizes & positions ────────────────────────────────
+
+const availableRimSizes = computed(() =>
+  [...new Set(
+    props.product.variants
+      .filter((v) => v.available)
+      .map((v) => v.rimSize),
+  )].sort(),
+)
+
+const availablePositions = computed(() =>
+  [...new Set(
+    props.product.variants
+      .filter((v) => v.available)
+      .map((v) => v.position),
+  )],
+)
+
+// ─── Derived — selected variant ───────────────────────────────────────────────
+
+const selectedVariant = computed<ProductVariant | undefined>(() => {
+  if (!selectedRimSize.value || !selectedPosition.value) return undefined
+  return props.product.variants.find(
+    (v) => v.available &&
+           v.rimSize   === selectedRimSize.value &&
+           v.position  === selectedPosition.value,
+  )
+})
+
+// ─── Derived — visible no-variant options ─────────────────────────────────────
+
+const visibleOptions = computed<WheelOption[]>(() => {
+  return props.product.options.filter((opt) => {
+    if (!opt || !opt.type) return false
+    if (!opt.visibleFor || opt.visibleFor.length === 0) return true
+    if (!selectedPosition.value) return true
+    return opt.visibleFor.includes(selectedPosition.value)
+  })
+})
+
+// Map from option.type → selected value label (for summary panel)
+const selectedOptionLabels = computed(() => {
+  const out: Record<string, string> = {}
+  for (const opt of visibleOptions.value) {
+    const id = selectedOptionIds[opt.type]
+    if (id !== undefined) {
+      const found = opt.values.find((v) => v.id === id)
+      if (found) out[opt.type] = found.label
+    }
+  }
+  return out
+})
+
+const allRequiredOptionsSelected = computed(() =>
+  visibleOptions.value
+    .filter((o) => o.required)
+    .every((o) => selectedOptionIds[o.type] !== undefined),
+)
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isPositionAvailable(position: string): boolean {
+  if (!selectedRimSize.value) return true
+  return props.product.variants.some(
+    (v) => v.available && v.rimSize === selectedRimSize.value && v.position === position,
+  )
+}
+
+function priceFormattedForPosition(position: string): string {
+  const v = props.product.variants.find(
+    (v) => v.available && v.rimSize === selectedRimSize.value && v.position === position,
+  )
+  return v?.price.formatted ?? ''
+}
+
+const minPriceFormatted = computed(() => {
+  const prices = props.product.variants
+    .filter((v) => v.available)
+    .map((v) => v.price.amount)
+  if (!prices.length) return ''
+  const min = Math.min(...prices)
+  return props.product.variants.find((v) => v.price.amount === min)?.price.formatted ?? ''
+})
+
+function posShortLabel(pos: string): string {
+  const map: Record<string, string> = {
+    'Complete Wheelset': 'Complete\nWheelset',
+    'Front Wheel':       'Front\nWheel',
+    'Rear Wheel':        'Rear\nWheel',
+    'Front Only':        'Front\nOnly',
+    'Rear Only':         'Rear\nOnly',
+  }
+  return map[pos] ?? pos
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim()
+}
+
+// ─── Defaults on mount ────────────────────────────────────────────────────────
+
+onMounted(() => {
+  // Prefer 29" if available, else first rim size
+  selectedRimSize.value =
+    availableRimSizes.value.find((s) => s.includes('29')) ??
+    availableRimSizes.value[0] ??
+    ''
+
+  // Prefer Complete Wheelset, else first position
+  selectedPosition.value =
+    availablePositions.value.find((p) => p === 'Complete Wheelset') ??
+    availablePositions.value[0] ??
+    ''
+})
+
+// Clear hidden options when position changes
+watch(selectedPosition, () => {
+  for (const key of Object.keys(selectedOptionIds)) {
+    const stillVisible = visibleOptions.value.some((o) => o.type === key)
+    if (!stillVisible) delete selectedOptionIds[key]
+  }
+})
+
+// ─── Cart ─────────────────────────────────────────────────────────────────────
+
+const canAddToCart = computed(
+  () => !!selectedVariant.value && allRequiredOptionsSelected.value && !cart.loading.value,
+)
+
+async function handleAddToCart() {
+  if (!selectedVariant.value) return
+
+  // Collect selected PTAV IDs for all visible options
+  const noVariantValueIds = visibleOptions.value
+    .map((o) => selectedOptionIds[o.type])
+    .filter((id): id is number => id !== undefined)
+
+  await cart.addToCart({
+    lines: [{
+      variantId:         selectedVariant.value.id,
+      quantity:          1,
+      noVariantValueIds: noVariantValueIds.length ? noVariantValueIds : undefined,
+    }],
+  })
+}
+</script>
