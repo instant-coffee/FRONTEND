@@ -109,7 +109,7 @@
         </div>
       </div>
 
-      <!-- ── No-variant options (freehub, brake, etc.) ── -->
+      <!-- ── No-variant options (freehub, brake, hub width, etc.) ── -->
       <template v-for="option in visibleOptions" :key="option.type">
         <div>
           <label :for="`opt-${option.type}`" class="nobl-label">
@@ -123,14 +123,22 @@
           >
             <option :value="undefined" disabled>Select {{ option.label.toLowerCase() }}</option>
             <option
-              v-for="val in option.values"
+              v-for="val in allowedValuesForOption(option)"
               :key="val.id"
               :value="val.id"
             >
               {{ val.label }}
             </option>
           </select>
-          <p v-if="option.visibleFor.length" class="text-xs text-nobl-grey-light mt-1.5">
+
+          <!-- Constraint notice — shown when values have been filtered -->
+          <p
+            v-if="activeConstraintNote(option.type)"
+            class="text-xs text-amber-600 mt-1.5 flex items-center gap-1"
+          >
+            <span>⚠</span> {{ activeConstraintNote(option.type) }}
+          </p>
+          <p v-else-if="option.visibleFor.length && selectedPosition" class="text-xs text-nobl-grey-light mt-1.5">
             Applies to: {{ option.visibleFor.join(', ') }}
           </p>
         </div>
@@ -264,6 +272,84 @@ const allRequiredOptionsSelected = computed(() =>
     .filter((o) => o.required)
     .every((o) => selectedOptionIds[o.type] !== undefined),
 )
+
+// ─── Hub width → brake interface constraint ───────────────────────────────────
+//
+// Super Boost axle widths are 6-bolt only — they don't accept Centerlock rotors.
+//   Front:  110 x 20 mm  (standard Boost is 110 x 15)
+//   Rear:   157 x 12 mm  (standard Boost is 148 x 12)
+//
+// When either is selected we filter the brakeInterface option to exclude any
+// value whose label contains "centerlock", and auto-clear the current selection
+// if it has become incompatible.
+
+const isSuperBoostActive = computed<boolean>(() => {
+  const frontHub = props.product.options.find((o) => o.type === 'frontHub')
+  const rearHub  = props.product.options.find((o) => o.type === 'rearHub')
+
+  const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
+  const rearLabel  = rearHub?.values.find((v)  => v.id === selectedOptionIds['rearHub'])?.label  ?? ''
+
+  return frontLabel.toLowerCase().includes('x 20') || rearLabel.includes('157')
+})
+
+// Returns the set of allowed PTAV IDs for each option type when a constraint
+// is active, or null when there is no restriction.
+const optionRestrictions = computed<Map<string, Set<number>>>(() => {
+  const map = new Map<string, Set<number>>()
+
+  if (isSuperBoostActive.value) {
+    const brakeOption = props.product.options.find((o) => o.type === 'brakeInterface')
+    if (brakeOption) {
+      const allowed = new Set(
+        brakeOption.values
+          .filter((v) => !v.label.toLowerCase().includes('centerlock'))
+          .map((v) => v.id),
+      )
+      map.set('brakeInterface', allowed)
+    }
+  }
+
+  return map
+})
+
+// Returns filtered values for a given option, applying any active constraints.
+function allowedValuesForOption(option: WheelOption) {
+  const allowed = optionRestrictions.value.get(option.type)
+  if (!allowed) return option.values
+  return option.values.filter((v) => allowed.has(v.id))
+}
+
+// Returns a human-readable reason why values are restricted, or null if not.
+function activeConstraintNote(optionType: string): string | null {
+  if (!optionRestrictions.value.has(optionType)) return null
+  if (optionType === 'brakeInterface') {
+    const frontLabel = props.product.options
+      .find((o) => o.type === 'frontHub')
+      ?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
+    const rearLabel = props.product.options
+      .find((o) => o.type === 'rearHub')
+      ?.values.find((v) => v.id === selectedOptionIds['rearHub'])?.label ?? ''
+
+    if (frontLabel.toLowerCase().includes('x 20')) {
+      return `${frontLabel} axle requires 6-bolt — Centerlock not compatible`
+    }
+    if (rearLabel.includes('157')) {
+      return `${rearLabel} axle requires 6-bolt — Centerlock not compatible`
+    }
+  }
+  return null
+}
+
+// Auto-clear brake selection when it becomes incompatible with chosen hub width.
+watch(isSuperBoostActive, (active) => {
+  if (!active) return
+  const allowed = optionRestrictions.value.get('brakeInterface')
+  const current = selectedOptionIds['brakeInterface']
+  if (allowed && current !== undefined && !allowed.has(current)) {
+    delete selectedOptionIds['brakeInterface']
+  }
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
