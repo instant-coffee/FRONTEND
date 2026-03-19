@@ -63,7 +63,7 @@
 
         <div class="mt-5">
           <div v-if="selectedVariant" class="flex items-baseline gap-2">
-            <span class="nobl-price">{{ selectedVariant.price.formatted }}</span>
+            <span class="nobl-price">{{ totalPrice?.formatted ?? selectedVariant.price.formatted }}</span>
           </div>
           <div v-else class="nobl-price text-nobl-grey-light">
             From {{ minPriceFormatted }}
@@ -109,14 +109,39 @@
         </div>
       </div>
 
-      <!-- ── No-variant options (freehub, brake, hub width, etc.) ── -->
+      <!-- ── No-variant options (freehub, brake, hub width, torque cap, etc.) ── -->
       <template v-for="option in visibleOptions" :key="option.type">
         <div>
           <label :for="`opt-${option.type}`" class="nobl-label">
             {{ option.label }}
             <span v-if="option.required" class="text-red-400 ml-0.5">*</span>
           </label>
+
+          <!-- Checkbox style — single-value options like Torque Caps -->
+          <label
+            v-if="isCheckboxOption(option)"
+            :for="`opt-${option.type}`"
+            class="flex items-center gap-3 p-3 mt-1 border rounded cursor-pointer transition-colors"
+            :class="selectedOptionIds[option.type] !== undefined
+              ? 'border-nobl-black bg-nobl-black text-white'
+              : 'border-nobl-grey-border hover:border-nobl-black'"
+          >
+            <input
+              type="checkbox"
+              :id="`opt-${option.type}`"
+              :checked="selectedOptionIds[option.type] !== undefined"
+              class="rounded border-nobl-grey-border accent-white"
+              @change="toggleCheckboxOption(option)"
+            />
+            <span class="text-sm font-medium flex-1">{{ option.values[0]?.label }}</span>
+            <span v-if="option.values[0]?.priceExtra" class="text-sm opacity-80 ml-auto">
+              +{{ option.values[0].priceExtra.formatted }}
+            </span>
+          </label>
+
+          <!-- Dropdown style — multi-value options -->
           <select
+            v-else
             :id="`opt-${option.type}`"
             v-model="selectedOptionIds[option.type]"
             class="nobl-select"
@@ -155,7 +180,7 @@
           <span v-if="cart.loading.value">Adding…</span>
           <span v-else-if="!selectedVariant">Select a configuration above</span>
           <span v-else-if="!allRequiredOptionsSelected">Choose all required options</span>
-          <span v-else>Add to Cart — {{ selectedVariant.price.formatted }}</span>
+          <span v-else>Add to Cart — {{ totalPrice?.formatted ?? selectedVariant.price.formatted }}</span>
         </button>
 
         <p v-if="cart.error.value" class="text-red-600 text-xs">
@@ -248,6 +273,7 @@ const selectedVariant = computed<ProductVariant | undefined>(() => {
 const visibleOptions = computed<WheelOption[]>(() => {
   return props.product.options.filter((opt) => {
     if (!opt || !opt.type) return false
+    if (hiddenOptionTypes.value.has(opt.type)) return false
     if (!opt.visibleFor || opt.visibleFor.length === 0) return true
     if (!selectedPosition.value) return true
     return opt.visibleFor.includes(selectedPosition.value)
@@ -273,6 +299,30 @@ const allRequiredOptionsSelected = computed(() =>
     .every((o) => selectedOptionIds[o.type] !== undefined),
 )
 
+// ─── Price including no-variant extras ────────────────────────────────────────
+// Sums the price_extra of every currently-selected visible option (e.g. Torque
+// Caps) on top of the selected variant's base price so the displayed total and
+// the Add to Cart button always reflect the true cost.
+
+const totalPrice = computed<{ amount: number; formatted: string } | null>(() => {
+  if (!selectedVariant.value) return null
+
+  const extraAmount = visibleOptions.value.reduce((sum, opt) => {
+    const selectedId = selectedOptionIds[opt.type]
+    if (selectedId === undefined) return sum
+    const val = opt.values.find((v) => v.id === selectedId)
+    return sum + (val?.priceExtra?.amount ?? 0)
+  }, 0)
+
+  const total   = selectedVariant.value.price.amount + extraAmount
+  const currency = selectedVariant.value.price.currency
+  const locale   = currency === 'CAD' ? 'en-CA' : 'en-US'
+  const formatted = new Intl.NumberFormat(locale, { style: 'currency', currency }).format(total)
+    + ` ${currency}`
+
+  return { amount: total, formatted }
+})
+
 // ─── Hub width → brake interface constraint ───────────────────────────────────
 //
 // Super Boost axle widths are 6-bolt only — they don't accept Centerlock rotors.
@@ -283,14 +333,20 @@ const allRequiredOptionsSelected = computed(() =>
 // value whose label contains "centerlock", and auto-clear the current selection
 // if it has become incompatible.
 
-const isSuperBoostActive = computed<boolean>(() => {
-  const frontHub = props.product.options.find((o) => o.type === 'frontHub')
-  const rearHub  = props.product.options.find((o) => o.type === 'rearHub')
+// True when any selected option forces a 6-bolt-only brake interface:
+//   - Front hub 110 x 20 (Super Boost front)
+//   - Rear hub  157 x 12 (Super Boost rear)
+//   - Torque Caps (only compatible with 6-bolt rotors)
+const requiresSixBoltBrake = computed<boolean>(() => {
+  const frontHub  = props.product.options.find((o) => o.type === 'frontHub')
+  const rearHub   = props.product.options.find((o) => o.type === 'rearHub')
+  const torqueCap = props.product.options.find((o) => o.type === 'torqueCap')
 
   const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
   const rearLabel  = rearHub?.values.find((v)  => v.id === selectedOptionIds['rearHub'])?.label  ?? ''
+  const hasTorqueCap = !!torqueCap && selectedOptionIds['torqueCap'] !== undefined
 
-  return frontLabel.toLowerCase().includes('x20') || rearLabel.includes('157')
+  return frontLabel.toLowerCase().includes('x 20') || rearLabel.includes('157') || hasTorqueCap
 })
 
 // Returns the set of allowed PTAV IDs for each option type when a constraint
@@ -298,7 +354,7 @@ const isSuperBoostActive = computed<boolean>(() => {
 const optionRestrictions = computed<Map<string, Set<number>>>(() => {
   const map = new Map<string, Set<number>>()
 
-  if (isSuperBoostActive.value) {
+  if (requiresSixBoltBrake.value) {
     const brakeOption = props.product.options.find((o) => o.type === 'brakeInterface')
     if (brakeOption) {
       const allowed = new Set(
@@ -330,6 +386,7 @@ function activeConstraintNote(optionType: string): string | null {
     const rearLabel = props.product.options
       .find((o) => o.type === 'rearHub')
       ?.values.find((v) => v.id === selectedOptionIds['rearHub'])?.label ?? ''
+    const hasTorqueCap = selectedOptionIds['torqueCap'] !== undefined
 
     if (frontLabel.toLowerCase().includes('x 20')) {
       return `${frontLabel} axle requires 6-bolt — Centerlock not compatible`
@@ -337,12 +394,15 @@ function activeConstraintNote(optionType: string): string | null {
     if (rearLabel.includes('157')) {
       return `${rearLabel} axle requires 6-bolt — Centerlock not compatible`
     }
+    if (hasTorqueCap) {
+      return 'Torque Caps require 6-bolt rotor — Centerlock not compatible'
+    }
   }
   return null
 }
 
-// Auto-clear brake selection when it becomes incompatible with chosen hub width.
-watch(isSuperBoostActive, (active) => {
+// Auto-clear brake selection when it becomes incompatible.
+watch(requiresSixBoltBrake, (active) => {
   if (!active) return
   const allowed = optionRestrictions.value.get('brakeInterface')
   const current = selectedOptionIds['brakeInterface']
@@ -350,6 +410,51 @@ watch(isSuperBoostActive, (active) => {
     delete selectedOptionIds['brakeInterface']
   }
 })
+
+// ─── Torque Cap visibility ─────────────────────────────────────────────────────
+//
+// Torque Caps only fit 110 x 15 axles — they are physically incompatible with
+// 110 x 20. We hide the option entirely until a front hub width is chosen, and
+// hide it again if the user switches to 110 x 20.
+
+const hiddenOptionTypes = computed<Set<string>>(() => {
+  const hidden = new Set<string>()
+  const frontHub = props.product.options.find((o) => o.type === 'frontHub')
+  const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
+
+  // Hide until a front hub is picked, or if 110 x 20 is selected
+  if (!frontLabel || frontLabel.toLowerCase().includes('x 20')) {
+    hidden.add('torqueCap')
+  }
+  return hidden
+})
+
+// Auto-clear selections for options that become hidden
+watch(hiddenOptionTypes, (hiddenSet) => {
+  for (const type of hiddenSet) {
+    if (selectedOptionIds[type] !== undefined) {
+      delete selectedOptionIds[type]
+    }
+  }
+})
+
+// ─── Checkbox-style options ───────────────────────────────────────────────────
+// Options with a single value (like Torque Caps) are rendered as checkboxes
+// rather than dropdowns — checked = that value selected, unchecked = cleared.
+
+function isCheckboxOption(option: WheelOption): boolean {
+  return option.values.length === 1
+}
+
+function toggleCheckboxOption(option: WheelOption) {
+  const val = option.values[0]
+  if (!val) return
+  if (selectedOptionIds[option.type] === val.id) {
+    delete selectedOptionIds[option.type]
+  } else {
+    selectedOptionIds[option.type] = val.id
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

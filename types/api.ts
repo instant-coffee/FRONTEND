@@ -30,8 +30,9 @@ export interface ProductVariant {
 }
 
 export interface AttributeValueDto {
-  id:    number   // PTAV ID — needed for cart noVariantValueIds
-  label: string
+  id:          number     // PTAV ID — needed for cart noVariantValueIds
+  label:       string
+  priceExtra?: PriceDto   // surcharge added on top of the variant price; only present when > 0
 }
 
 export interface WheelOption {
