@@ -17,8 +17,8 @@
           >
             <option value="nobl_us">nobl_us (USD)</option>
             <option value="nobl_ca">nobl_ca (CAD)</option>
-            <option value="wb_us">wb_us (USD)</option>
-            <option value="wb_ca">wb_ca (CAD)</option>
+            <!-- <option value="wb_us">wb_us (USD)</option>
+            <option value="wb_ca">wb_ca (CAD)</option> -->
           </select>
         </div>
       </div>

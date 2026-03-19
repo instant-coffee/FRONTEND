@@ -10,10 +10,11 @@ export interface PriceDto {
 // Returns a plain array — no wrapper object.
 
 export interface ProductListItem {
-  id:       number
-  name:     string
-  brand:    string
-  currency: 'CAD' | 'USD'
+  id:         number
+  name:       string
+  brand:      string
+  currency:   'CAD' | 'USD'
+  familyTag?: string   // set when product belongs to a family (e.g. "family:sr38-hope-pro5")
 }
 
 // ─── Product detail (GET /products/:id) ───────────────────────────────────────

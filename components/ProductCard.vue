@@ -1,5 +1,5 @@
 <template>
-  <NuxtLink :to="`/wheels/${product.id}`" class="nobl-card group block">
+  <NuxtLink :to="cardLink" class="nobl-card group block">
     <!-- Image placeholder -->
     <div class="aspect-[4/3] bg-nobl-grey-muted flex items-center justify-center">
       <div class="text-center space-y-1">
@@ -21,7 +21,9 @@
         <span class="text-xs font-semibold text-nobl-blue group-hover:underline">
           Configure →
         </span>
-        <span class="text-xs text-nobl-grey-light font-mono">{{ product.id }}</span>
+        <span class="text-xs text-nobl-grey-light font-mono">
+          {{ product.familyTag ? product.familyTag.replace('family:', '') : product.id }}
+        </span>
       </div>
     </div>
   </NuxtLink>
@@ -33,6 +35,14 @@ import type { ProductListItem } from '~/types/api'
 const props = defineProps<{
   product: ProductListItem
 }>()
+
+// Route to the family page if this product has a family tag,
+// otherwise fall back to the single-template product page.
+const cardLink = computed(() =>
+  props.product.familyTag
+    ? `/wheels/family/${encodeURIComponent(props.product.familyTag)}`
+    : `/wheels/${props.product.id}`,
+)
 
 const categoryLabel = computed(() => {
   const name = props.product.name.toLowerCase()

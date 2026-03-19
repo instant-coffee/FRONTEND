@@ -12,5 +12,14 @@ export function useProducts() {
     return apiFetch<Product>(`/products/${id}`)
   }
 
-  return { fetchProducts, fetchProduct }
+  /**
+   * Fetch a product family by tag — assembles FW + RW + Wheelset into a single
+   * WheelConfigurator-compatible response. The tag must match exactly what is
+   * set in Odoo (e.g. "family:sr38-hope-pro5").
+   */
+  async function fetchProductFamily(tag: string): Promise<Product> {
+    return apiFetch<Product>(`/products/family/${encodeURIComponent(tag)}`)
+  }
+
+  return { fetchProducts, fetchProduct, fetchProductFamily }
 }
