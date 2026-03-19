@@ -290,7 +290,7 @@ const isSuperBoostActive = computed<boolean>(() => {
   const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
   const rearLabel  = rearHub?.values.find((v)  => v.id === selectedOptionIds['rearHub'])?.label  ?? ''
 
-  return frontLabel.toLowerCase().includes('x 20') || rearLabel.includes('157')
+  return frontLabel.toLowerCase().includes('x20') || rearLabel.includes('157')
 })
 
 // Returns the set of allowed PTAV IDs for each option type when a constraint
