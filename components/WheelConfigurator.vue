@@ -229,6 +229,16 @@ import type { Product, ProductVariant, WheelOption } from '~/types/api'
 
 const props = defineProps<{ product: Product }>()
 
+// Explicit display order for option types.
+// torqueCap sits directly under frontHub since it's conditional on that selection.
+const OPTION_ORDER: Record<string, number> = {
+  frontHub:       1,
+  torqueCap:      2,
+  rearHub:        3,
+  freehub:        4,
+  brakeInterface: 5,
+}
+
 const cart = useCart()
 
 // ─── Selection state ──────────────────────────────────────────────────────────
@@ -271,13 +281,15 @@ const selectedVariant = computed<ProductVariant | undefined>(() => {
 // ─── Derived — visible no-variant options ─────────────────────────────────────
 
 const visibleOptions = computed<WheelOption[]>(() => {
-  return props.product.options.filter((opt) => {
-    if (!opt || !opt.type) return false
-    if (hiddenOptionTypes.value.has(opt.type)) return false
-    if (!opt.visibleFor || opt.visibleFor.length === 0) return true
-    if (!selectedPosition.value) return true
-    return opt.visibleFor.includes(selectedPosition.value)
-  })
+  return props.product.options
+    .filter((opt) => {
+      if (!opt || !opt.type) return false
+      if (hiddenOptionTypes.value.has(opt.type)) return false
+      if (!opt.visibleFor || opt.visibleFor.length === 0) return true
+      if (!selectedPosition.value) return true
+      return opt.visibleFor.includes(selectedPosition.value)
+    })
+    .sort((a, b) => (OPTION_ORDER[a.type] ?? 99) - (OPTION_ORDER[b.type] ?? 99))
 })
 
 // Map from option.type → selected value label (for summary panel)
