@@ -183,7 +183,7 @@
               id="bike-make"
               v-model="bikeDetails.make"
               type="text"
-              placeholder="e.g. Trek"
+              placeholder="e.g. Forbidden"
               class="nobl-input"
             />
           </div>
@@ -193,7 +193,7 @@
               id="bike-model"
               v-model="bikeDetails.model"
               type="text"
-              placeholder="e.g. Slash 9.9"
+              placeholder="e.g. Reya"
               class="nobl-input"
             />
           </div>
@@ -203,7 +203,7 @@
               id="bike-year"
               v-model="bikeDetails.year"
               type="text"
-              placeholder="e.g. 2024"
+              placeholder="e.g. 2026"
               maxlength="4"
               class="nobl-input"
             />
