@@ -233,10 +233,13 @@ const props = defineProps<{ product: Product }>()
 // torqueCap sits directly under frontHub since it's conditional on that selection.
 const OPTION_ORDER: Record<string, number> = {
   frontHub:       1,
-  torqueCap:      2,
+  torqueCap:      2,   // sub-option of frontHub (only with 110x15)
   rearHub:        3,
   freehub:        4,
   brakeInterface: 5,
+  valveBrand:     6,
+  noblCapColour:  7,   // sub-option of valveBrand (only when NOBL selected)
+  peatysColour:   8,   // sub-option of valveBrand (only when Peaty's selected)
 }
 
 const cart = useCart()
@@ -423,21 +426,31 @@ watch(requiresSixBoltBrake, (active) => {
   }
 })
 
-// ─── Torque Cap visibility ─────────────────────────────────────────────────────
+// ─── Conditional option visibility ────────────────────────────────────────────
 //
-// Torque Caps only fit 110 x 15 axles — they are physically incompatible with
-// 110 x 20. We hide the option entirely until a front hub width is chosen, and
-// hide it again if the user switches to 110 x 20.
+// Some options are only relevant when a parent option has a specific value.
+// We compute a set of hidden type keys and filter them out of visibleOptions.
+// The auto-clear watcher below ensures stale selections are removed when an
+// option becomes hidden (e.g. switching valve brand clears the old cap colour).
 
 const hiddenOptionTypes = computed<Set<string>>(() => {
   const hidden = new Set<string>()
-  const frontHub = props.product.options.find((o) => o.type === 'frontHub')
-  const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
 
-  // Hide until a front hub is picked, or if 110 x 20 is selected
+  // ── Torque Cap: only available with 110 x 15 front axle ───────────────────
+  const frontHub   = props.product.options.find((o) => o.type === 'frontHub')
+  const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
   if (!frontLabel || frontLabel.toLowerCase().includes('x 20')) {
     hidden.add('torqueCap')
   }
+
+  // ── Valve cap colour: gated on valve brand selection ──────────────────────
+  // Neither sub-selector shows until a valve brand is chosen.
+  // Once chosen, only the matching brand's colour selector appears.
+  const valveBrandOpt = props.product.options.find((o) => o.type === 'valveBrand')
+  const valveLabel    = valveBrandOpt?.values.find((v) => v.id === selectedOptionIds['valveBrand'])?.label ?? ''
+  if (!valveLabel.toLowerCase().includes('nobl'))  hidden.add('noblCapColour')
+  if (!valveLabel.toLowerCase().includes('peaty')) hidden.add('peatysColour')
+
   return hidden
 })
 
