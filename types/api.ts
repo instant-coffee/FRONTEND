@@ -71,9 +71,17 @@ export interface CartLinePayload {
   noVariantValueIds?: number[]   // PTAV IDs for freehub, brake, etc.
 }
 
+export interface BikeDetails {
+  make?:  string
+  model?: string
+  year?:  string
+  notes?: string
+}
+
 export interface CartPayload {
-  lines:   CartLinePayload[]
-  siteId?: string
+  lines:        CartLinePayload[]
+  siteId?:      string
+  bikeDetails?: BikeDetails
 }
 
 export interface CartResponseLine {

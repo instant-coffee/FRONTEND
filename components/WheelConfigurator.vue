@@ -170,6 +170,57 @@
         </div>
       </template>
 
+      <!-- ── Bike Details ── -->
+      <div class="pt-4 border-t border-nobl-grey-border space-y-4">
+        <div>
+          <p class="nobl-label">What bike are these wheels for?</p>
+          <p class="text-xs text-nobl-grey-light mt-0.5">Optional — helps our build team spec the wheel correctly</p>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label for="bike-make" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Make</label>
+            <input
+              id="bike-make"
+              v-model="bikeDetails.make"
+              type="text"
+              placeholder="e.g. Trek"
+              class="nobl-input"
+            />
+          </div>
+          <div>
+            <label for="bike-model" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Model</label>
+            <input
+              id="bike-model"
+              v-model="bikeDetails.model"
+              type="text"
+              placeholder="e.g. Slash 9.9"
+              class="nobl-input"
+            />
+          </div>
+          <div>
+            <label for="bike-year" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Year</label>
+            <input
+              id="bike-year"
+              v-model="bikeDetails.year"
+              type="text"
+              placeholder="e.g. 2024"
+              maxlength="4"
+              class="nobl-input"
+            />
+          </div>
+        </div>
+        <div>
+          <label for="bike-notes" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Additional Questions</label>
+          <textarea
+            id="bike-notes"
+            v-model="bikeDetails.notes"
+            rows="3"
+            placeholder="Any other details or questions for our build team…"
+            class="nobl-input resize-none"
+          />
+        </div>
+      </div>
+
       <!-- ── Add to Cart ── -->
       <div class="pt-2 space-y-3">
         <button
@@ -226,7 +277,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Product, ProductVariant, WheelOption } from '~/types/api'
+import type { Product, ProductVariant, WheelOption, BikeDetails } from '~/types/api'
 
 const props = defineProps<{ product: Product }>()
 
@@ -254,6 +305,9 @@ const selectedPosition = ref('')
 // Keyed by option.type → selected PTAV id (number)
 const selectedOptionIds = reactive<Record<string, number | undefined>>({})
 const selectedAddonIds  = ref<number[]>([])
+
+// Optional bike build details — sent as order note to Odoo
+const bikeDetails = reactive<BikeDetails>({ make: '', model: '', year: '', notes: '' })
 
 // ─── Derived — available rim sizes & positions ────────────────────────────────
 
@@ -579,12 +633,27 @@ async function handleAddToCart() {
     .map((o) => selectedOptionIds[o.type])
     .filter((id): id is number => id !== undefined)
 
+  // Only send bikeDetails if at least one field has content
+  const hasAnyBikeDetail =
+    bikeDetails.make?.trim() ||
+    bikeDetails.model?.trim() ||
+    bikeDetails.year?.trim() ||
+    bikeDetails.notes?.trim()
+
   await cart.addToCart({
     lines: [{
       variantId:         selectedVariant.value.id,
       quantity:          1,
       noVariantValueIds: noVariantValueIds.length ? noVariantValueIds : undefined,
     }],
+    ...(hasAnyBikeDetail ? {
+      bikeDetails: {
+        make:  bikeDetails.make?.trim()  || undefined,
+        model: bikeDetails.model?.trim() || undefined,
+        year:  bikeDetails.year?.trim()  || undefined,
+        notes: bikeDetails.notes?.trim() || undefined,
+      },
+    } : {}),
   })
 }
 </script>
