@@ -645,6 +645,9 @@ async function handleAddToCart() {
       variantId:         selectedVariant.value.id,
       quantity:          1,
       noVariantValueIds: noVariantValueIds.length ? noVariantValueIds : undefined,
+      // Send the frontend-computed total (base price + all price_extra surcharges)
+      // so Odoo sets price_unit correctly without needing an onchange round-trip.
+      unitPrice:         totalPrice.value?.amount ?? selectedVariant.value.price.amount,
     }],
     ...(hasAnyBikeDetail ? {
       bikeDetails: {

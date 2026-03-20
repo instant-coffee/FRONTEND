@@ -69,6 +69,7 @@ export interface CartLinePayload {
   variantId:          number
   quantity:           number
   noVariantValueIds?: number[]   // PTAV IDs for freehub, brake, etc.
+  unitPrice?:         number     // pre-computed total incl. price_extra surcharges
 }
 
 export interface BikeDetails {
