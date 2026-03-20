@@ -143,10 +143,11 @@
           <select
             v-else
             :id="`opt-${option.type}`"
-            v-model="selectedOptionIds[option.type]"
+            :value="selectedOptionIds[option.type] ?? ''"
             class="nobl-select"
+            @change="handleOptionSelect(option.type, $event)"
           >
-            <option :value="undefined" disabled>Select {{ option.label.toLowerCase() }}</option>
+            <option value="" disabled>Select {{ option.label.toLowerCase() }}</option>
             <option
               v-for="val in allowedValuesForOption(option)"
               :key="val.id"
@@ -240,6 +241,8 @@ const OPTION_ORDER: Record<string, number> = {
   valveBrand:     6,
   noblCapColour:  7,   // sub-option of valveBrand (only when NOBL selected)
   peatysColour:   8,   // sub-option of valveBrand (only when Peaty's selected)
+  graphicOption:  9,
+  decalColour:    10,  // sub-option of graphicOption (only when Full Letter Decals selected)
 }
 
 const cart = useCart()
@@ -451,6 +454,13 @@ const hiddenOptionTypes = computed<Set<string>>(() => {
   if (!valveLabel.toLowerCase().includes('nobl'))  hidden.add('noblCapColour')
   if (!valveLabel.toLowerCase().includes('peaty')) hidden.add('peatysColour')
 
+  // ── Decal Colour: only when Full Letter Decals is chosen ──────────────────
+  const graphicOpt   = props.product.options.find((o) => o.type === 'graphicOption')
+  const graphicLabel = graphicOpt?.values.find((v) => v.id === selectedOptionIds['graphicOption'])?.label ?? ''
+  if (!graphicLabel.toLowerCase().includes('full letter')) {
+    hidden.add('decalColour')
+  }
+
   return hidden
 })
 
@@ -469,6 +479,16 @@ watch(hiddenOptionTypes, (hiddenSet) => {
 
 function isCheckboxOption(option: WheelOption): boolean {
   return option.values.length === 1
+}
+
+function handleOptionSelect(optionType: string, event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === '') {
+    delete selectedOptionIds[optionType]
+    return
+  }
+
+  selectedOptionIds[optionType] = Number(value)
 }
 
 function toggleCheckboxOption(option: WheelOption) {
