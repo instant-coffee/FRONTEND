@@ -53,14 +53,17 @@ export interface AddOn {
 }
 
 export interface Product {
-  id:          number
-  name:        string
-  brand:       string
-  description: string
-  currency:    'CAD' | 'USD'
-  variants:    ProductVariant[]
-  options:     WheelOption[]
-  addOns:      AddOn[]          // capital O — matches API response
+  id:           number
+  name:         string
+  brand:        string
+  description:  string
+  currency:     'CAD' | 'USD'
+  variants:     ProductVariant[]
+  options:      WheelOption[]
+  addOns:       AddOn[]          // capital O — matches API response
+  // Optional metadata from product tags (discipline:..., weight:...)
+  discipline?:  string           // e.g. "e-mtb|gravity"
+  weightGrams?: number           // e.g. 1971
 }
 
 // ─── Cart (POST /cart) ────────────────────────────────────────────────────────

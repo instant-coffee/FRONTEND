@@ -57,9 +57,13 @@
       <!-- Name + description + price -->
       <div class="border-b border-nobl-grey-border pb-6">
         <h1 class="text-2xl font-bold text-nobl-black">{{ product.name }}</h1>
-        <p v-if="product.description" class="text-nobl-grey text-sm mt-2 leading-relaxed max-w-prose">
-          {{ stripHtml(product.description) }}
-        </p>
+        <div v-if="product.description || product.discipline || product.weightGrams" class="mt-3">
+          <WheelDescription
+            :description="product.description"
+            :discipline="product.discipline"
+            :weight-grams="product.weightGrams"
+          />
+        </div>
 
         <div class="mt-5">
           <div v-if="selectedVariant" class="flex items-baseline gap-2">
@@ -280,6 +284,7 @@
 import type { Product, ProductVariant, WheelOption, BikeDetails } from '~/types/api'
 
 const props = defineProps<{ product: Product }>()
+console.log("🚀 ~ props:", props.product)
 
 // Explicit display order for option types.
 // torqueCap sits directly under frontHub since it's conditional on that selection.
