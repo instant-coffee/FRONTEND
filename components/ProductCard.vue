@@ -46,9 +46,9 @@ const cardLink = computed(() =>
 
 const categoryLabel = computed(() => {
   const name = props.product.name.toLowerCase()
-  if (name.includes('ethos'))     return 'Carbon · Ethos'
-  if (name.includes('signature')) return 'Carbon · Signature'
-  if (name.includes('sinewave'))  return 'Alloy · Sinewave'
+  if (name.includes('ethos'))     return 'Ethos Series'
+  if (name.includes('signature')) return 'Signature Series'
+  if (name.includes('sinewave'))  return 'Sinewave Series'
   if (name.includes('dropbar'))   return 'Dropbar'
   return 'Wheelset'
 })
