@@ -1,304 +1,131 @@
 <template>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-    <!-- Left — visual / summary panel -->
-    <div class="space-y-6">
-      <!-- Wheel graphic -->
-      <div class="aspect-square bg-nobl-grey-muted rounded-lg flex flex-col items-center justify-center gap-4">
-        <svg class="w-48 h-48 text-nobl-grey-border" viewBox="0 0 200 200" fill="none">
-          <circle cx="100" cy="100" r="90" stroke="currentColor" stroke-width="8" />
-          <circle cx="100" cy="100" r="60" stroke="currentColor" stroke-width="4" />
-          <circle cx="100" cy="100" r="12" fill="currentColor" opacity="0.3" />
-          <line v-for="n in 12" :key="n"
-            :transform="`rotate(${n * 30} 100 100)`"
-            x1="100" y1="16" x2="100" y2="40"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round"
-          />
-          <line v-for="n in 12" :key="`b${n}`"
-            :transform="`rotate(${n * 30 + 15} 100 100)`"
-            x1="100" y1="16" x2="100" y2="40"
-            stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"
-          />
-        </svg>
-        <div class="text-center">
-          <p class="text-xs font-semibold text-nobl-grey-light uppercase tracking-widest">
-            {{ selectedVariant?.rimSize ?? '—' }}
-          </p>
-          <p class="text-xs text-nobl-grey-light mt-0.5">
-            {{ selectedVariant?.position ?? 'Select options' }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Selected configuration summary -->
-      <div v-if="selectedVariant" class="border border-nobl-grey-border rounded-lg p-5 space-y-3">
-        <p class="nobl-label">Selected configuration</p>
-        <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <!-- Variant attributes -->
-          <div v-for="(val, key) in selectedVariant.attributes" :key="String(key)">
-            <span class="text-nobl-grey-light text-xs">{{ key }}</span>
-            <div class="font-medium text-nobl-black mt-0.5">{{ val }}</div>
-          </div>
-          <!-- Chosen no-variant options -->
-          <div v-for="option in visibleOptions" :key="`sel-${option.type}`">
-            <span class="text-nobl-grey-light text-xs">{{ option.label }}</span>
-            <div class="font-medium text-nobl-black mt-0.5">
-              {{ selectedOptionLabels[option.type] || '—' }}
-            </div>
-          </div>
-        </div>
-        <div class="pt-2 border-t border-nobl-grey-border">
-          <span class="text-xs font-mono text-nobl-grey-light">SKU: {{ selectedVariant.sku || '—' }}</span>
-        </div>
+  <div class="space-y-8">
+    <!-- ── Product header (always visible) ── -->
+    <div>
+      <h1 class="text-2xl font-bold text-nobl-black">{{ product.name }}</h1>
+      <div v-if="product.description || product.discipline || product.weightGrams" class="mt-3">
+        <WheelDescription
+          :description="product.description"
+          :discipline="product.discipline"
+          :weight-grams="product.weightGrams"
+        />
       </div>
     </div>
 
-    <!-- Right — controls -->
-    <div class="space-y-8">
-      <!-- Name + description + price -->
-      <div class="border-b border-nobl-grey-border pb-6">
-        <h1 class="text-2xl font-bold text-nobl-black">{{ product.name }}</h1>
-        <div v-if="product.description || product.discipline || product.weightGrams" class="mt-3">
-          <WheelDescription
-            :description="product.description"
-            :discipline="product.discipline"
-            :weight-grams="product.weightGrams"
-          />
-        </div>
+    <!-- ── Step indicator + price bar ── -->
+    <ConfiguratorStepIndicator
+      :steps="STEPS"
+      :current-step="currentStep"
+      :total-price="totalPrice?.formatted"
+      :currency="product.currency"
+      @update:current-step="currentStep = $event"
+    />
 
-        <div class="mt-5">
-          <div v-if="selectedVariant" class="flex items-baseline gap-2">
-            <span class="nobl-price">{{ totalPrice?.formatted ?? selectedVariant.price.formatted }}</span>
-          </div>
-          <div v-else class="nobl-price text-nobl-grey-light">
-            From {{ minPriceFormatted }}
-          </div>
-          <p class="nobl-price-note mt-1">
-            {{ product.currency }} · Retail price
-          </p>
-        </div>
-      </div>
+    <!-- ── Step content ── -->
+    <div class="min-h-[400px]">
+      <!-- Step 1 — Build Spec -->
+      <ConfiguratorBuildSpecStep
+        v-if="currentStep === 1"
+        :product="product"
+        :selected-rim-size="selectedRimSize"
+        :selected-position="selectedPosition"
+        :selected-variant="selectedVariant"
+        :visible-options="buildSpecOptions"
+        :selected-option-ids="selectedOptionIds"
+        :available-rim-sizes="availableRimSizes"
+        :available-positions="availablePositions"
+        :is-position-available="isPositionAvailable"
+        :price-formatted-for-position="priceFormattedForPosition"
+        :is-checkbox-option="isCheckboxOption"
+        :allowed-values-for-option="allowedValuesForOption"
+        :active-constraint-note="activeConstraintNote"
+        @update:rim-size="selectedRimSize = $event"
+        @update:position="selectedPosition = $event"
+        @update:option-id="handleOptionUpdate"
+        @next="currentStep = 2"
+      />
 
-      <!-- ── Rim Size ── -->
-      <div>
-        <label for="rim-size" class="nobl-label">Rim Size</label>
-        <select id="rim-size" v-model="selectedRimSize" class="nobl-select">
-          <option value="" disabled>Select rim size</option>
-          <option v-for="size in availableRimSizes" :key="size" :value="size">{{ size }}</option>
-        </select>
-      </div>
+      <!-- Step 2 — Graphics -->
+      <ConfiguratorGraphicsStep
+        v-else-if="currentStep === 2"
+        :visible-options="graphicsOptions"
+        :selected-option-ids="selectedOptionIds"
+        :allowed-values-for-option="allowedValuesForOption"
+        :is-checkbox-option="isCheckboxOption"
+        @update:option-id="handleOptionUpdate"
+        @next="currentStep = 3"
+        @back="currentStep = 1"
+      />
 
-      <!-- ── Wheelset Position ── -->
-      <div>
-        <label class="nobl-label">Wheelset Options</label>
-        <div class="grid grid-cols-3 gap-2">
-          <button
-            v-for="pos in availablePositions"
-            :key="pos"
-            type="button"
-            :disabled="!isPositionAvailable(pos)"
-            :class="[
-              'border rounded px-3 py-3 text-sm font-medium text-center transition-all duration-150',
-              selectedPosition === pos
-                ? 'border-nobl-black bg-nobl-black text-white'
-                : 'border-nobl-grey-border text-nobl-grey hover:border-nobl-black',
-              !isPositionAvailable(pos) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
-            ]"
-            @click="selectedPosition = pos"
-          >
-            <div class="text-xs leading-tight whitespace-pre-line">{{ posShortLabel(pos) }}</div>
-            <div v-if="selectedRimSize && isPositionAvailable(pos)" class="text-xs mt-1 opacity-70">
-              {{ priceFormattedForPosition(pos) }}
-            </div>
-          </button>
-        </div>
-      </div>
+      <!-- Step 3 — Accessories -->
+      <ConfiguratorAccessoriesStep
+        v-else-if="currentStep === 3"
+        :visible-options="accessoriesOptions"
+        :selected-option-ids="selectedOptionIds"
+        :allowed-values-for-option="allowedValuesForOption"
+        :is-checkbox-option="isCheckboxOption"
+        @update:option-id="handleOptionUpdate"
+        @next="currentStep = 4"
+        @back="currentStep = 2"
+      />
 
-      <!-- ── No-variant options (freehub, brake, hub width, torque cap, etc.) ── -->
-      <template v-for="option in visibleOptions" :key="option.type">
-        <div>
-          <label :for="`opt-${option.type}`" class="nobl-label">
-            {{ option.label }}
-            <span v-if="option.required" class="text-red-400 ml-0.5">*</span>
-          </label>
-
-          <!-- Checkbox style — single-value options like Torque Caps -->
-          <label
-            v-if="isCheckboxOption(option)"
-            :for="`opt-${option.type}`"
-            class="flex items-center gap-3 p-3 mt-1 border rounded cursor-pointer transition-colors"
-            :class="selectedOptionIds[option.type] !== undefined
-              ? 'border-nobl-black bg-nobl-black text-white'
-              : 'border-nobl-grey-border hover:border-nobl-black'"
-          >
-            <input
-              type="checkbox"
-              :id="`opt-${option.type}`"
-              :checked="selectedOptionIds[option.type] !== undefined"
-              class="rounded border-nobl-grey-border accent-white"
-              @change="toggleCheckboxOption(option)"
-            />
-            <span class="text-sm font-medium flex-1">{{ option.values[0]?.label }}</span>
-            <span v-if="option.values[0]?.priceExtra" class="text-sm opacity-80 ml-auto">
-              +{{ option.values[0].priceExtra.formatted }}
-            </span>
-          </label>
-
-          <!-- Dropdown style — multi-value options -->
-          <select
-            v-else
-            :id="`opt-${option.type}`"
-            :value="selectedOptionIds[option.type] ?? ''"
-            class="nobl-select"
-            @change="handleOptionSelect(option.type, $event)"
-          >
-            <option value="" disabled>Select {{ option.label.toLowerCase() }}</option>
-            <option
-              v-for="val in allowedValuesForOption(option)"
-              :key="val.id"
-              :value="val.id"
-            >
-              {{ val.label }}
-            </option>
-          </select>
-
-          <!-- Constraint notice — shown when values have been filtered -->
-          <p
-            v-if="activeConstraintNote(option.type)"
-            class="text-xs text-amber-600 mt-1.5 flex items-center gap-1"
-          >
-            <span>⚠</span> {{ activeConstraintNote(option.type) }}
-          </p>
-          <p v-else-if="option.visibleFor.length && selectedPosition" class="text-xs text-nobl-grey-light mt-1.5">
-            Applies to: {{ option.visibleFor.join(', ') }}
-          </p>
-        </div>
-      </template>
-
-      <!-- ── Bike Details ── -->
-      <div class="pt-4 border-t border-nobl-grey-border space-y-4">
-        <div>
-          <p class="nobl-label">What bike are these wheels for?</p>
-          <p class="text-xs text-nobl-grey-light mt-0.5">Optional — helps our build team spec the wheel correctly</p>
-        </div>
-        <div class="grid grid-cols-3 gap-3">
-          <div>
-            <label for="bike-make" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Make</label>
-            <input
-              id="bike-make"
-              v-model="bikeDetails.make"
-              type="text"
-              placeholder="e.g. Forbidden"
-              class="nobl-input"
-            />
-          </div>
-          <div>
-            <label for="bike-model" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Model</label>
-            <input
-              id="bike-model"
-              v-model="bikeDetails.model"
-              type="text"
-              placeholder="e.g. Reya"
-              class="nobl-input"
-            />
-          </div>
-          <div>
-            <label for="bike-year" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Year</label>
-            <input
-              id="bike-year"
-              v-model="bikeDetails.year"
-              type="text"
-              placeholder="e.g. 2026"
-              maxlength="4"
-              class="nobl-input"
-            />
-          </div>
-        </div>
-        <div>
-          <label for="bike-notes" class="text-xs font-semibold uppercase tracking-wider text-nobl-grey-light block mb-1">Additional Questions</label>
-          <textarea
-            id="bike-notes"
-            v-model="bikeDetails.notes"
-            rows="3"
-            placeholder="Any other details or questions for our build team…"
-            class="nobl-input resize-none"
-          />
-        </div>
-      </div>
-
-      <!-- ── Add to Cart ── -->
-      <div class="pt-2 space-y-3">
-        <button
-          type="button"
-          class="nobl-btn-primary w-full"
-          :disabled="!canAddToCart"
-          @click="handleAddToCart"
-        >
-          <span v-if="cart.loading.value">Adding…</span>
-          <span v-else-if="!selectedVariant">Select a configuration above</span>
-          <span v-else-if="!allRequiredOptionsSelected">Choose all required options</span>
-          <span v-else>Add to Cart — {{ totalPrice?.formatted ?? selectedVariant.price.formatted }}</span>
-        </button>
-
-        <p v-if="cart.error.value" class="text-red-600 text-xs">
-          {{ cart.error.value }}
-        </p>
-
-        <div
-          v-if="cart.lastOrder.value"
-          class="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800"
-        >
-          ✓ Added to order <span class="font-mono">{{ cart.lastOrder.value.orderName }}</span>
-        </div>
-      </div>
-
-      <!-- ── Add-ons ── -->
-      <div v-if="product.addOns?.length" class="pt-4 border-t border-nobl-grey-border">
-        <p class="nobl-label mb-3">Optional Add-ons</p>
-        <div class="space-y-2">
-          <label
-            v-for="addon in product.addOns"
-            :key="addon.id"
-            class="flex items-center justify-between gap-3 p-3 border border-nobl-grey-border rounded cursor-pointer hover:border-nobl-black transition-colors"
-          >
-            <div class="flex items-center gap-3">
-              <input
-                type="checkbox"
-                :value="addon.id"
-                v-model="selectedAddonIds"
-                class="rounded border-nobl-grey-border"
-              />
-              <div>
-                <span class="text-sm font-medium text-nobl-black">{{ addon.name }}</span>
-                <span class="text-xs text-nobl-grey-light ml-2">{{ addon.category }}</span>
-              </div>
-            </div>
-            <span class="text-sm text-nobl-grey whitespace-nowrap">+{{ addon.price.formatted }}</span>
-          </label>
-        </div>
-      </div>
+      <!-- Step 4 — Review -->
+      <ConfiguratorReviewStep
+        v-else-if="currentStep === 4"
+        :product="product"
+        :selected-variant="selectedVariant"
+        :selected-option-labels="selectedOptionLabels"
+        :total-price="totalPrice"
+        :bike-details="bikeDetails"
+        :can-add-to-cart="canAddToCart"
+        :cart-loading="cart.loading.value"
+        :cart-error="cart.error.value"
+        :last-order-name="cart.lastOrder.value?.orderName ?? null"
+        :review-sections="reviewSections"
+        @update:bike-details="(field, val) => (bikeDetails[field] = val)"
+        @go-to-step="currentStep = $event"
+        @add-to-cart="handleAddToCart"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { Product, ProductVariant, WheelOption, BikeDetails } from '~/types/api'
+import type { ReviewSection } from './configurator/ReviewStep.vue'
 
 const props = defineProps<{ product: Product }>()
-console.log("🚀 ~ props:", props.product)
 
-// Explicit display order for option types.
-// torqueCap sits directly under frontHub since it's conditional on that selection.
+// ─── Step definitions ─────────────────────────────────────────────────────────
+
+const STEPS = [
+  { key: 1, label: 'Build' },
+  { key: 2, label: 'Graphics' },
+  { key: 3, label: 'Accessories' },
+  { key: 4, label: 'Review' },
+] as const
+
+const currentStep = ref(1)
+
+// ─── Option type → step grouping ──────────────────────────────────────────────
+// Step 1: manufacturing spec. Step 2: visual. Step 3: accessories.
+
+const STEP_1_TYPES = new Set(['frontHub', 'torqueCap', 'rearHub', 'freehub', 'brakeInterface'])
+const STEP_2_TYPES = new Set(['graphicOption', 'decalColour'])
+const STEP_3_TYPES = new Set(['valveBrand', 'noblCapColour', 'peatysColour'])
+
+// Explicit display order within each step
 const OPTION_ORDER: Record<string, number> = {
   frontHub:       1,
-  torqueCap:      2,   // sub-option of frontHub (only with 110x15)
+  torqueCap:      2,
   rearHub:        3,
   freehub:        4,
   brakeInterface: 5,
-  valveBrand:     6,
-  noblCapColour:  7,   // sub-option of valveBrand (only when NOBL selected)
-  peatysColour:   8,   // sub-option of valveBrand (only when Peaty's selected)
-  graphicOption:  9,
-  decalColour:    10,  // sub-option of graphicOption (only when Full Letter Decals selected)
+  graphicOption:  6,
+  decalColour:    7,
+  valveBrand:     8,
+  noblCapColour:  9,
+  peatysColour:   10,
 }
 
 const cart = useCart()
@@ -307,11 +134,8 @@ const cart = useCart()
 
 const selectedRimSize  = ref('')
 const selectedPosition = ref('')
-// Keyed by option.type → selected PTAV id (number)
 const selectedOptionIds = reactive<Record<string, number | undefined>>({})
 const selectedAddonIds  = ref<number[]>([])
-
-// Optional bike build details — sent as order note to Odoo
 const bikeDetails = reactive<BikeDetails>({ make: '', model: '', year: '', notes: '' })
 
 // ─── Derived — available rim sizes & positions ────────────────────────────────
@@ -357,7 +181,12 @@ const visibleOptions = computed<WheelOption[]>(() => {
     .sort((a, b) => (OPTION_ORDER[a.type] ?? 99) - (OPTION_ORDER[b.type] ?? 99))
 })
 
-// Map from option.type → selected value label (for summary panel)
+// Filtered per step
+const buildSpecOptions   = computed(() => visibleOptions.value.filter(o => STEP_1_TYPES.has(o.type)))
+const graphicsOptions    = computed(() => visibleOptions.value.filter(o => STEP_2_TYPES.has(o.type)))
+const accessoriesOptions = computed(() => visibleOptions.value.filter(o => STEP_3_TYPES.has(o.type)))
+
+// Map from option.type → selected value label (for summary + review)
 const selectedOptionLabels = computed(() => {
   const out: Record<string, string> = {}
   for (const opt of visibleOptions.value) {
@@ -377,9 +206,6 @@ const allRequiredOptionsSelected = computed(() =>
 )
 
 // ─── Price including no-variant extras ────────────────────────────────────────
-// Sums the price_extra of every currently-selected visible option (e.g. Torque
-// Caps) on top of the selected variant's base price so the displayed total and
-// the Add to Cart button always reflect the true cost.
 
 const totalPrice = computed<{ amount: number; formatted: string } | null>(() => {
   if (!selectedVariant.value) return null
@@ -401,19 +227,7 @@ const totalPrice = computed<{ amount: number; formatted: string } | null>(() => 
 })
 
 // ─── Hub width → brake interface constraint ───────────────────────────────────
-//
-// Super Boost axle widths are 6-bolt only — they don't accept Centerlock rotors.
-//   Front:  110 x 20 mm  (standard Boost is 110 x 15)
-//   Rear:   157 x 12 mm  (standard Boost is 148 x 12)
-//
-// When either is selected we filter the brakeInterface option to exclude any
-// value whose label contains "centerlock", and auto-clear the current selection
-// if it has become incompatible.
 
-// True when any selected option forces a 6-bolt-only brake interface:
-//   - Front hub 110 x 20 (Super Boost front)
-//   - Rear hub  157 x 12 (Super Boost rear)
-//   - Torque Caps (only compatible with 6-bolt rotors)
 const requiresSixBoltBrake = computed<boolean>(() => {
   const frontHub  = props.product.options.find((o) => o.type === 'frontHub')
   const rearHub   = props.product.options.find((o) => o.type === 'rearHub')
@@ -426,8 +240,6 @@ const requiresSixBoltBrake = computed<boolean>(() => {
   return frontLabel.toLowerCase().includes('x 20') || rearLabel.includes('157') || hasTorqueCap
 })
 
-// Returns the set of allowed PTAV IDs for each option type when a constraint
-// is active, or null when there is no restriction.
 const optionRestrictions = computed<Map<string, Set<number>>>(() => {
   const map = new Map<string, Set<number>>()
 
@@ -446,14 +258,12 @@ const optionRestrictions = computed<Map<string, Set<number>>>(() => {
   return map
 })
 
-// Returns filtered values for a given option, applying any active constraints.
 function allowedValuesForOption(option: WheelOption) {
   const allowed = optionRestrictions.value.get(option.type)
   if (!allowed) return option.values
   return option.values.filter((v) => allowed.has(v.id))
 }
 
-// Returns a human-readable reason why values are restricted, or null if not.
 function activeConstraintNote(optionType: string): string | null {
   if (!optionRestrictions.value.has(optionType)) return null
   if (optionType === 'brakeInterface') {
@@ -465,20 +275,16 @@ function activeConstraintNote(optionType: string): string | null {
       ?.values.find((v) => v.id === selectedOptionIds['rearHub'])?.label ?? ''
     const hasTorqueCap = selectedOptionIds['torqueCap'] !== undefined
 
-    if (frontLabel.toLowerCase().includes('x 20')) {
+    if (frontLabel.toLowerCase().includes('x 20'))
       return `${frontLabel} axle requires 6-bolt — Centerlock not compatible`
-    }
-    if (rearLabel.includes('157')) {
+    if (rearLabel.includes('157'))
       return `${rearLabel} axle requires 6-bolt — Centerlock not compatible`
-    }
-    if (hasTorqueCap) {
+    if (hasTorqueCap)
       return 'Torque Caps require 6-bolt rotor — Centerlock not compatible'
-    }
   }
   return null
 }
 
-// Auto-clear brake selection when it becomes incompatible.
 watch(requiresSixBoltBrake, (active) => {
   if (!active) return
   const allowed = optionRestrictions.value.get('brakeInterface')
@@ -489,31 +295,24 @@ watch(requiresSixBoltBrake, (active) => {
 })
 
 // ─── Conditional option visibility ────────────────────────────────────────────
-//
-// Some options are only relevant when a parent option has a specific value.
-// We compute a set of hidden type keys and filter them out of visibleOptions.
-// The auto-clear watcher below ensures stale selections are removed when an
-// option becomes hidden (e.g. switching valve brand clears the old cap colour).
 
 const hiddenOptionTypes = computed<Set<string>>(() => {
   const hidden = new Set<string>()
 
-  // ── Torque Cap: only available with 110 x 15 front axle ───────────────────
+  // Torque Cap: only with 110 x 15 front axle
   const frontHub   = props.product.options.find((o) => o.type === 'frontHub')
   const frontLabel = frontHub?.values.find((v) => v.id === selectedOptionIds['frontHub'])?.label ?? ''
   if (!frontLabel || frontLabel.toLowerCase().includes('x 20')) {
     hidden.add('torqueCap')
   }
 
-  // ── Valve cap colour: gated on valve brand selection ──────────────────────
-  // Neither sub-selector shows until a valve brand is chosen.
-  // Once chosen, only the matching brand's colour selector appears.
+  // Valve cap colour: gated on valve brand
   const valveBrandOpt = props.product.options.find((o) => o.type === 'valveBrand')
   const valveLabel    = valveBrandOpt?.values.find((v) => v.id === selectedOptionIds['valveBrand'])?.label ?? ''
   if (!valveLabel.toLowerCase().includes('nobl'))  hidden.add('noblCapColour')
   if (!valveLabel.toLowerCase().includes('peaty')) hidden.add('peatysColour')
 
-  // ── Decal Colour: only when Full Letter Decals is chosen ──────────────────
+  // Decal Colour: only when Full Letter Decals is chosen
   const graphicOpt   = props.product.options.find((o) => o.type === 'graphicOption')
   const graphicLabel = graphicOpt?.values.find((v) => v.id === selectedOptionIds['graphicOption'])?.label ?? ''
   if (!graphicLabel.toLowerCase().includes('full letter')) {
@@ -523,7 +322,6 @@ const hiddenOptionTypes = computed<Set<string>>(() => {
   return hidden
 })
 
-// Auto-clear selections for options that become hidden
 watch(hiddenOptionTypes, (hiddenSet) => {
   for (const type of hiddenSet) {
     if (selectedOptionIds[type] !== undefined) {
@@ -532,35 +330,19 @@ watch(hiddenOptionTypes, (hiddenSet) => {
   }
 })
 
-// ─── Checkbox-style options ───────────────────────────────────────────────────
-// Options with a single value (like Torque Caps) are rendered as checkboxes
-// rather than dropdowns — checked = that value selected, unchecked = cleared.
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function isCheckboxOption(option: WheelOption): boolean {
   return option.values.length === 1
 }
 
-function handleOptionSelect(optionType: string, event: Event) {
-  const value = (event.target as HTMLSelectElement).value
-  if (value === '') {
-    delete selectedOptionIds[optionType]
-    return
-  }
-
-  selectedOptionIds[optionType] = Number(value)
-}
-
-function toggleCheckboxOption(option: WheelOption) {
-  const val = option.values[0]
-  if (!val) return
-  if (selectedOptionIds[option.type] === val.id) {
-    delete selectedOptionIds[option.type]
+function handleOptionUpdate(type: string, id: number | undefined) {
+  if (id === undefined) {
+    delete selectedOptionIds[type]
   } else {
-    selectedOptionIds[option.type] = val.id
+    selectedOptionIds[type] = id
   }
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function isPositionAvailable(position: string): boolean {
   if (!selectedRimSize.value) return true
@@ -576,47 +358,57 @@ function priceFormattedForPosition(position: string): string {
   return v?.price.formatted ?? ''
 }
 
-const minPriceFormatted = computed(() => {
-  const prices = props.product.variants
-    .filter((v) => v.available)
-    .map((v) => v.price.amount)
-  if (!prices.length) return ''
-  const min = Math.min(...prices)
-  return props.product.variants.find((v) => v.price.amount === min)?.price.formatted ?? ''
-})
+// ─── Review sections (built for ReviewStep) ──────────────────────────────────
 
-function posShortLabel(pos: string): string {
-  const map: Record<string, string> = {
-    'Complete Wheelset': 'Complete\nWheelset',
-    'Front Wheel':       'Front\nWheel',
-    'Rear Wheel':        'Rear\nWheel',
-    'Front Only':        'Front\nOnly',
-    'Rear Only':         'Rear\nOnly',
+const reviewSections = computed<ReviewSection[]>(() => {
+  const sections: ReviewSection[] = []
+
+  // Build Spec
+  const specRows: { label: string; value: string }[] = []
+  if (selectedVariant.value) {
+    specRows.push({ label: 'Product', value: props.product.name })
+    specRows.push({ label: 'Position', value: selectedVariant.value.position })
+    specRows.push({ label: 'Rim Size', value: selectedVariant.value.rimSize })
   }
-  return map[pos] ?? pos
-}
+  for (const opt of buildSpecOptions.value) {
+    const label = selectedOptionLabels.value[opt.type]
+    if (label) specRows.push({ label: opt.label, value: label })
+  }
+  sections.push({ title: 'Build Spec', stepKey: 1, rows: specRows })
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').trim()
-}
+  // Graphics
+  const gfxRows: { label: string; value: string }[] = []
+  for (const opt of graphicsOptions.value) {
+    const label = selectedOptionLabels.value[opt.type]
+    if (label) gfxRows.push({ label: opt.label, value: label })
+  }
+  sections.push({ title: 'Graphics', stepKey: 2, rows: gfxRows })
+
+  // Accessories
+  const accRows: { label: string; value: string }[] = []
+  for (const opt of accessoriesOptions.value) {
+    const label = selectedOptionLabels.value[opt.type]
+    if (label) accRows.push({ label: opt.label, value: label })
+  }
+  sections.push({ title: 'Accessories', stepKey: 3, rows: accRows })
+
+  return sections
+})
 
 // ─── Defaults on mount ────────────────────────────────────────────────────────
 
 onMounted(() => {
-  // Prefer 29" if available, else first rim size
   selectedRimSize.value =
     availableRimSizes.value.find((s) => s.includes('29')) ??
     availableRimSizes.value[0] ??
     ''
 
-  // Prefer Complete Wheelset, else first position
   selectedPosition.value =
     availablePositions.value.find((p) => p === 'Complete Wheelset') ??
     availablePositions.value[0] ??
     ''
 })
 
-// Clear hidden options when position changes
 watch(selectedPosition, () => {
   for (const key of Object.keys(selectedOptionIds)) {
     const stillVisible = visibleOptions.value.some((o) => o.type === key)
@@ -633,12 +425,10 @@ const canAddToCart = computed(
 async function handleAddToCart() {
   if (!selectedVariant.value) return
 
-  // Collect selected PTAV IDs for all visible options
   const noVariantValueIds = visibleOptions.value
     .map((o) => selectedOptionIds[o.type])
     .filter((id): id is number => id !== undefined)
 
-  // Only send bikeDetails if at least one field has content
   const hasAnyBikeDetail =
     bikeDetails.make?.trim() ||
     bikeDetails.model?.trim() ||
@@ -650,8 +440,6 @@ async function handleAddToCart() {
       variantId:         selectedVariant.value.id,
       quantity:          1,
       noVariantValueIds: noVariantValueIds.length ? noVariantValueIds : undefined,
-      // Send the frontend-computed total (base price + all price_extra surcharges)
-      // so Odoo sets price_unit correctly without needing an onchange round-trip.
       unitPrice:         totalPrice.value?.amount ?? selectedVariant.value.price.amount,
     }],
     ...(hasAnyBikeDetail ? {
